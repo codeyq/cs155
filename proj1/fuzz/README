@@ -1,0 +1,3 @@
+TODO: Include a stack trace from GDB of bsdtar crashing on an input found by
+afl-fuzz. Briefly describe what the vulnerability is in the libarchive source
+code (2-3 sentences).
