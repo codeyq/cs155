@@ -102,6 +102,10 @@ int main(int argc, char *argv[])
 
 buf从`0xbffffcc8`开始，`%ebp=0xbffffd90`，buf溢出后修改`%ebp`的最后两个byte使得`%ebp`变成`%ebp=0xbffffd00`也就是在buf中间的`new_ebp`，当函数返回时，`%esp`会从`new_ebp`中load，为了方便显示，`0xbffffd00`中存了`0xffffffff`，然后`%esp`拿栈顶来load给`%eip`也就数`new_ebp`后面的`new_eip`，这也是shellcode的起始地址
 
+**target1和target2的区别**
+
+target2中，main调用了foo，foo调用了bar，bar里面buffer overflow，而target1中main只调用了foo，这里就是最大的区别。因为target2中，overflow了bar这个frame的`%ebp`，然后返回到foo的时候，`%esp`从`%ebp`里面load，foo想要返回时，取esp上面的也就是被替换的`%eip`返回，从而进入了shellcode。target1中，overflow了foo这个frame的`%ebp`和`%eip`，然后`%esp` load了`%ebp=0x90909090`，返回进入了shellcode，即使`%ebp`被改了也没问题。
+
 ```
                                   ^------------|
                                   |            v
@@ -113,7 +117,7 @@ val:              0xffffffff 0xbffffd08            0xbffffd00
 ```
 
 
-```bash
+```console
 $ (gdb) x/100x buf
 0xbffffcc8: 0x90909090  0x90909090  0x90909090  0x90909090
 0xbffffcd8: 0x90909090  0x90909090  0x90909090  0x90909090
