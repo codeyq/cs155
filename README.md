@@ -4,8 +4,8 @@
     + [Target1 Buffer overflow](#target1-buffer-overflow)
     + [Target2 Off-by-one](#target2-off-by-one)
 
-## Proj1
-### Target1 Buffer overflow
+# Proj1
+## Target1 Buffer overflow
 ```c
 int bar(char *arg, char *out)
 {
@@ -59,8 +59,8 @@ int main(void)
   return 0;
 }
 ```
-### Target2 Off by one
-虽然nstrcpy做了范围check，但是多复制了一个byte，因此可以overflow %ebp
+## Target2 Off by one
+虽然nstrcpy做了范围check，但是多复制了一个byte，因此可以overflow `%ebp`
 ```c
 void nstrcpy(char *out, int outl, char *in)
 {
