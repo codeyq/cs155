@@ -210,7 +210,11 @@ int main(int argc, char *argv[])
   return 0;
 }
 ```
-关键的是要满足以下几个条件，有符号的count要小于1000，无符号的要满足**(20 * count) mod (2^32)略大于20000**，但是又不能太大，否则会seg fault，这里取`count=2147484649`，所以`(20 * 2147484649) mod 2^32 = 20020`，插入shellcode然后修改return地址即可
+关键的是要满足以下几个条件，有符号的count要小于1000，无符号的要满足`(20 * count) mod (2^32) = k`略大于20000，但是又不能太大，否则会seg fault
+
+所以是`20 * count = k + 2^32 * r`，`count = k/20 + 2^32*r/20`，因为k需要略大于20000才能overflow并且需要是20的整数倍，所以取`k=20020`，又因为count需要overflow int，所以`1001+2^32*r/20 > 2^32 - 1`，因此取`r=10`，所以`count=1001+2^31=2147484649`，所以`(20 * 2147484649) mod 2^32 = 20020`，插入shellcode然后修改return地址即可
+
+
 ```c
 if (count < MAX_WIDGETS) 
     memcpy(buf, in, count * sizeof(struct widget_t));
