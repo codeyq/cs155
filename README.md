@@ -867,7 +867,7 @@ int respond_once(int clientfd) {
   return line_len;
 }
 ```
-先来实现shellcode，要删除/tmp/passwd可以用系统调用`unlink`，但是特别要注意的是，**`unlink`的sys_no就是10也就是`\x0a`**，这会导致shellcode拷贝了一半就停下echo回来了。所以要把`%al`里面的10拆开，先放入5然后再放入5即可
+先来实现shellcode，要删除/tmp/passwd可以用系统调用`unlink`，但是特别要注意的是，**`unlink`的syscall_no就是10也就是`\x0a`**，这会导致shellcode拷贝了一半就停下echo回来了。所以要把`%al`里面的10拆开，先放入5然后再放入5即可
 ```asm
 #include <sys/syscall.h>
 
