@@ -1091,7 +1091,7 @@ router.get('/profile', asyncMiddleware(async (req, res, next) => {
 
 这里要注意一下几点
 
-- 如果用户不存在，会用蓝色显示** xx does not exist!**，因此需要加入`<p hidden>`来隐藏这行输出
+- 如果用户不存在，会用蓝色显示**xx does not exist!**，因此需要加入`<p hidden>`来隐藏这行输出
 - cookie中可能有其他的key value pair，但是题目只要拿到session，注意，**加号`+`在这里不work**
 ```javascript
 function getCookie(name) {
