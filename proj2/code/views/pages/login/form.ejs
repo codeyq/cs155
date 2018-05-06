@@ -1,0 +1,16 @@
+<h3>Login</h3>
+
+<form id=login_form class=pure-form-stacked action=post_login method=post>
+
+  <% if(errorMsg) { %>
+    <p class='error'> <%= errorMsg %> </p>
+  <% } %>
+
+  <label for=username>Username</label>
+  <input type=text name=username value=<%= account.username %> >
+
+  <label for=password>Password</label>
+  <input type=password name=password />
+
+  <p><input type=submit id=login class=pure-button value=Login /></p>
+</form>

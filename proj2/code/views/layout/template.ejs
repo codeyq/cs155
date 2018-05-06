@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+  <head>
+     <% include ../partials/head %>
+  </head>
+  <body>
+    <div class="container">
+      <% include ../partials/header %>
+
+      <div id="main" class="centerpiece">
+        <% include ../partials/login-status %>
+
+        <%- include('../pages/'+page) -%>
+      </div>
+
+    </div>
+  </body>
+</html>

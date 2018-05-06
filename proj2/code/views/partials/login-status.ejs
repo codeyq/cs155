@@ -1,0 +1,9 @@
+<div class="login-status">
+  <% if(loggedIn) { %>
+    <span class="login-status-text">Hi, <strong><%= account.username %></strong></span>
+    <a href="logout" class="button-primary pure-button">Log out</a>
+  <% } else { %>
+    <a href="login" class="button-primary pure-button">Log in</a>
+    <a href="register" class="button-primary pure-button">Register</a>
+<% } %>
+</div>

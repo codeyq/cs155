@@ -1,0 +1,22 @@
+{
+  "name": "proj2-18",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "./node_modules/babel-cli/bin/babel-node.js ./bin/www",
+    "create-db": "./node_modules/babel-cli/bin/babel-node.js ./db/migrate/reset.js",
+    "reset": "rm db/database.sqlite && yarn create-db"
+  },
+  "dependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-preset-env": "^1.6.1",
+    "cookie-session": "^2.0.0-beta.3",
+    "debug": "~2.6.9",
+    "ejs": "~2.5.7",
+    "ejs-lint": "^0.3.0",
+    "express": "~4.16.0",
+    "http-errors": "~1.6.2",
+    "morgan": "~1.9.0",
+    "sqlite": "^2.9.1"
+  }
+}

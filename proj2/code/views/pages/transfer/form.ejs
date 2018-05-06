@@ -1,0 +1,19 @@
+<h3>Transfer Bitbars</h3>
+
+<form class="pure-form pure-form-stacked" action="post_transfer" method="post">
+  <% if(errorMsg) { %>
+    <p class='error'> <%= errorMsg %> </p>
+  <% } %>
+
+	<p>
+		You currently have <%= account.bitbars %> bitbars.
+	</p>
+
+  <label for="destination_username">Transfer to</label>
+  <input type="text" name="destination_username" value="<%= result.receiver %>">
+
+  <label for="quantity">Amount</label>
+  <input type="text" name="quantity" value="<%= result.amount %>"/>
+
+  <p><input type="submit" class="pure-button button-primary" value="Transfer" /></p>
+</form>
