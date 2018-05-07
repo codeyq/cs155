@@ -23,6 +23,7 @@ function render(req, res, next, page, title, errorMsg = false, result = null) {
 
 router.get('/', (req, res, next) => {
   render(req, res, next, 'index', 'Bitbar Home');
+  logDatabaseState();
 });
 
 
@@ -33,12 +34,13 @@ router.post('/set_profile', asyncMiddleware(async (req, res, next) => {
   const query = `UPDATE Users SET profile = ? WHERE username = "${req.session.account.username}";`;
   const result = await db.run(query, req.body.new_profile);
   render(req, res, next, 'index', 'Bitbar Home');
-
+  logDatabaseState();
 }));
 
 
 router.get('/login', (req, res, next) => {
   render(req, res, next, 'login/form', 'Login');
+  logDatabaseState();
 });
 
 
@@ -55,11 +57,13 @@ router.post('/post_login', asyncMiddleware(async (req, res, next) => {
     }
   }
   render(req, res, next, 'login/form', 'Login', 'This username and password combination does not exist!');
+  logDatabaseState();
 }));
 
 
 router.get('/register', (req, res, next) => {
   render(req, res, next, 'register/form', 'Register');
+  logDatabaseState();
 });
 
 
@@ -86,6 +90,7 @@ router.post('/post_register', asyncMiddleware(async (req, res, next) => {
     bitbars: 100,
   };
   render(req, res, next,'register/success', 'Bitbar Home');
+  logDatabaseState();
 }));
 
 
@@ -100,6 +105,7 @@ router.get('/close', asyncMiddleware(async (req, res, next) => {
   req.session.loggedIn = false;
   req.session.account = {};
   render(req, res, next, 'index', 'Bitbar Home', 'Deleted account successfully!');
+  logDatabaseState();
 }));
 
 
@@ -107,6 +113,7 @@ router.get('/logout', (req, res, next) => {
   req.session.loggedIn = false;
   req.session.account = {};
   render(req, res, next, 'index', 'Bitbar Home', 'Logged out successfully!');
+  logDatabaseState();
 });
 
 
@@ -134,6 +141,7 @@ router.get('/profile', asyncMiddleware(async (req, res, next) => {
   } else { // visitor did not make query, show them their own profile
     render(req, res, next, 'profile/view', 'View Profile', false, req.session.account);
   }
+  logDatabaseState();
 }));
 
 
@@ -143,6 +151,7 @@ router.get('/transfer', (req, res, next) => {
     return;
   };
   render(req, res, next, 'transfer/form', 'Transfer Bitbars', false, {receiver:null, amount:null});
+  logDatabaseState();
 });
 
 
@@ -177,6 +186,7 @@ router.post('/post_transfer', asyncMiddleware(async(req, res, next) => {
   } else { // user does not exist
     render(req, res, next, 'transfer/form', 'Transfer Bitbars', 'This user does not exist!', {receiver:null, amount:null});
   }
+  logDatabaseState();
 }));
 
 
@@ -184,7 +194,15 @@ router.get('/steal_cookie', (req, res, next) => {
   let stolenCookie = req.query.cookie;
   console.log('\n\n' + stolenCookie + '\n\n');
   render(req, res, next, 'theft/view_stolen_cookie', 'Cookie Stolen!', false, stolenCookie);
+  logDatabaseState();
 });
 
 
 module.exports = router;
+
+async function logDatabaseState() {
+  const db = await dbPromise;
+  const query = `SELECT * FROM Users`;
+  const result = await db.all(query);
+  console.log(result);
+}
