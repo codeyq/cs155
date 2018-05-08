@@ -1,1 +1,1 @@
-user3";
+user3" OR username LIKE 'user3" OR username LIKE %';
