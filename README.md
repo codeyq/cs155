@@ -1314,7 +1314,7 @@ var textarea = "<div id='forge'>".concat(document.getElementById('forge').innerH
 
 与之前的类似，提交form的逻辑是，首先调用`load()`，提交`<form id="worm" target="iframe1" ...>`并把刷新结果指向隐藏的`iframe1`，然后调用`transferMoney()`，提交`<form id="transfer" target="iframe2" ...>`并把刷新结果指向隐藏的`iframe2`
 
-完整的profile worm代码如下所示，尽情地传播吧~我的蠕虫🐛~嘻嘻😆
+完整的profile worm代码如下所示，尽情地传播吧！我的蠕虫🐛！嘻嘻😆
 ```html
 <div id="forge">
     Money money I want money
